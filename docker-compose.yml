@@ -1,0 +1,68 @@
+﻿version: '3.9'
+
+services:
+  # Search API (ASP.NET Core Web API)
+  search-api:
+    build: ./src/SearchAPI
+    ports:
+      - "5000:5000"
+    depends_on:
+      - database
+    networks:
+      - enron-network
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+
+  # Cleaner Service (Background Worker)
+  cleaner-service:
+    build: ./src/CleanerService
+    depends_on:
+      - message-queue
+    networks:
+      - enron-network
+
+  # Indexer Service (Background Worker)
+  indexer-service:
+    build: ./src/IndexerService
+    depends_on:
+      - message-queue
+      - database
+    networks:
+      - enron-network
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+
+  # Message Queue (RabbitMQ)
+  message-queue:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"  # AMQP protocol
+      - "15672:15672"  # Web UI for monitoring
+    networks:
+      - enron-network
+
+  # PostgreSQL Database
+  database:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - enron-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+
+networks:
+  enron-network:
+    driver: bridge
+
+volumes:
+  pgdata:
