@@ -3,9 +3,11 @@
 services:
   # Search API (ASP.NET Core Web API)
   search-api:
-    build: ./src/SearchAPI
+    build:
+      context: .
+      dockerfile: src/SearchAPI/Dockerfile
     ports:
-      - "5000:5000"
+      - "8080:8080"
     depends_on:
       - database
     networks:
@@ -15,7 +17,9 @@ services:
 
   # Cleaner Service (Background Worker)
   cleaner-service:
-    build: ./src/CleanerService
+    build:
+      context: .
+      dockerfile: src/CleanerService/Dockerfile
     depends_on:
       - message-queue
     networks:
@@ -23,7 +27,9 @@ services:
 
   # Indexer Service (Background Worker)
   indexer-service:
-    build: ./src/IndexerService
+    build:
+      context: .
+      dockerfile: src/IndexerService/Dockerfile
     depends_on:
       - message-queue
       - database
@@ -32,6 +38,22 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
 
+  # Database Migration Service (Runs Once)
+  db-migration:
+    build:
+      context: .
+      dockerfile: infrastructure/Database/Dockerfile
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - enron-network
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+    command: [ "sh", "-c", "sleep 20 && dotnet ef database update" ]
+    restart: "no"
+  
+  
   # Message Queue (RabbitMQ)
   message-queue:
     image: rabbitmq:3-management
@@ -55,9 +77,9 @@ services:
     networks:
       - enron-network
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
-      interval: 10s
-      retries: 5
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}" ]
+      interval: 5s
+      retries: 10
       timeout: 5s
 
 networks:
