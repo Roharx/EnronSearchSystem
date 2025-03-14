@@ -1,25 +1,18 @@
 using CleanerService;
 using CleanerService.Services;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 
-Host.CreateDefaultBuilder(args)
-    .ConfigureAppConfiguration((context, config) => { 
-        config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true); 
-    })
-    .ConfigureServices((context, services) =>
+var builder = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((hostContext, services) =>
     {
-        services.AddSingleton<FileReaderService>(provider =>
-            new FileReaderService(context.Configuration["CleanerService:MailDirectory"])
-        );
-        services.AddSingleton<MessageQueueService>(provider =>
-            new MessageQueueService(
-                context.Configuration["RabbitMQ:HostName"],
-                context.Configuration["RabbitMQ:QueueName"]
-            )
-        );
+        var config = hostContext.Configuration;
+
+        string mailDir = config["CleanerService:MailDirectory"] ?? "/maildir";
+        string rabbitHost = config["RabbitMQ:HostName"] ?? "message-queue";
+        string queueName = config["RabbitMQ:QueueName"] ?? "cleaned-emails";
+
+        services.AddSingleton(new FileReaderService(mailDir));
+        services.AddSingleton(new MessageQueueService(rabbitHost, queueName));
         services.AddHostedService<Worker>();
-    })
-    .Build()
-    .Run();
+    });
+
+builder.Build().Run();

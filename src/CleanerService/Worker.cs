@@ -1,41 +1,36 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using CleanerService.Services;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
 
-public class Worker : BackgroundService
+namespace CleanerService
 {
-    private readonly FileReaderService _fileReader;
-    private readonly MessageQueueService _messageQueue;
-
-    public Worker(IConfiguration config)
+    public class Worker : BackgroundService
     {
-        string mailDir = config["MailDir"];
-        string rabbitHost = config["RabbitMQ:Host"];
-        string queueName = config["RabbitMQ:QueueName"];
+        private readonly FileReaderService _fileReaderService;
+        private readonly MessageQueueService _messageQueueService;
+        private readonly ILogger<Worker> _logger;
 
-        _fileReader = new FileReaderService(mailDir);
-        _messageQueue = new MessageQueueService(rabbitHost, queueName);
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        Console.WriteLine("Cleaner Service started.");
-
-        foreach (var (fileName, content) in _fileReader.ReadEmails())
+        public Worker(FileReaderService fileReaderService, MessageQueueService messageQueueService, ILogger<Worker> logger)
         {
-            _messageQueue.SendMessage(fileName, content);
+            _fileReaderService = fileReaderService;
+            _messageQueueService = messageQueueService;
+            _logger = logger;
         }
 
-        Console.WriteLine("Processing complete.");
-        await Task.Delay(1000, stoppingToken); // Prevent instant shutdown
-    }
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("Cleaner Service started.");
 
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        _messageQueue.Dispose();
-        return base.StopAsync(cancellationToken);
+            foreach (var (fileName, content) in _fileReaderService.ReadEmails())
+            {
+                _logger.LogInformation($"Processing file: {fileName}");
+                
+                _messageQueueService.SendMessage(fileName, content);
+                
+                _logger.LogInformation($"Sent to message queue: {fileName}");
+
+                await Task.Delay(100, stoppingToken); // Prevent CPU overuse
+            }
+
+            _logger.LogInformation("Cleaner Service finished processing emails.");
+        }
     }
 }
