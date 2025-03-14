@@ -1,23 +1,41 @@
-namespace CleanerService;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using CleanerService.Services;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 
 public class Worker : BackgroundService
 {
-    private readonly ILogger<Worker> _logger;
+    private readonly FileReaderService _fileReader;
+    private readonly MessageQueueService _messageQueue;
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(IConfiguration config)
     {
-        _logger = logger;
+        string mailDir = config["MailDir"];
+        string rabbitHost = config["RabbitMQ:Host"];
+        string queueName = config["RabbitMQ:QueueName"];
+
+        _fileReader = new FileReaderService(mailDir);
+        _messageQueue = new MessageQueueService(rabbitHost, queueName);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        Console.WriteLine("Cleaner Service started.");
+
+        foreach (var (fileName, content) in _fileReader.ReadEmails())
         {
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            }
-            await Task.Delay(1000, stoppingToken);
+            _messageQueue.SendMessage(fileName, content);
         }
+
+        Console.WriteLine("Processing complete.");
+        await Task.Delay(1000, stoppingToken); // Prevent instant shutdown
+    }
+
+    public override Task StopAsync(CancellationToken cancellationToken)
+    {
+        _messageQueue.Dispose();
+        return base.StopAsync(cancellationToken);
     }
 }
