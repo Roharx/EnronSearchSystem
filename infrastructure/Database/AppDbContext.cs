@@ -2,68 +2,82 @@
 using Database.Models;
 using System;
 
-namespace Database;
-
-public class AppDbContext : DbContext
+namespace Database
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-    public AppDbContext() { }
-
-    public DbSet<Word> Words { get; set; }
-    public DbSet<FileMetadata> Files { get; set; }
-    public DbSet<Occurrence> Occurrences { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public class AppDbContext : DbContext
     {
-        // Word Table
-        modelBuilder.Entity<Word>()
-            .HasKey(w => w.WordId);
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public AppDbContext() { }
 
-        // FileMetadata Table
-        modelBuilder.Entity<FileMetadata>()
-            .HasKey(f => f.FileId);
+        public DbSet<Word> Words { get; set; }
+        public DbSet<FileMetadata> Files { get; set; }
+        public DbSet<Occurrence> Occurrences { get; set; }
 
-        // Occurrence Table (Many-to-Many)
-        modelBuilder.Entity<Occurrence>()
-            .HasKey(o => new { o.WordId, o.FileId });
-
-        modelBuilder.Entity<Occurrence>()
-            .HasOne(o => o.Word)
-            .WithMany()
-            .HasForeignKey(o => o.WordId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<Occurrence>()
-            .HasOne(o => o.File)
-            .WithMany()
-            .HasForeignKey(o => o.FileId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        base.OnModelCreating(modelBuilder);
-    }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+            // Word Table
+            modelBuilder.Entity<Word>()
+                .HasKey(w => w.WordId);
 
-            if (string.IsNullOrEmpty(databaseUrl))
+            modelBuilder.Entity<Word>()
+                .HasIndex(w => w.Text) // 🔹 Add Unique Constraint for Words
+                .IsUnique();
+
+            // FileMetadata Table
+            modelBuilder.Entity<FileMetadata>()
+                .HasKey(f => f.FileId);
+
+            // Occurrence Table (Many-to-Many)
+            modelBuilder.Entity<Occurrence>()
+                .HasKey(o => new { o.WordId, o.FileId });
+
+            modelBuilder.Entity<Occurrence>()
+                .HasOne(o => o.Word)
+                .WithMany()
+                .HasForeignKey(o => o.WordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Occurrence>()
+                .HasOne(o => o.File)
+                .WithMany()
+                .HasForeignKey(o => o.FileId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            base.OnModelCreating(modelBuilder);
+        }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
             {
-                throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
+                var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+                if (!string.IsNullOrEmpty(databaseUrl))
+                {
+                    try
+                    {
+                        var uri = new Uri(databaseUrl);
+                        var host = uri.Host;
+                        var port = uri.Port;
+                        var dbName = uri.AbsolutePath.TrimStart('/');
+                        var userInfo = uri.UserInfo.Split(':');
+                        var username = userInfo[0];
+                        var password = userInfo.Length > 1 ? userInfo[1] : "";
+
+                        var connectionString = $"Host={host};Port={port};Database={dbName};Username={username};Password={password};Pooling=true;";
+
+                        optionsBuilder.UseNpgsql(connectionString);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException($"Invalid DATABASE_URL format: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
+                }
             }
-
-            var uri = new Uri(databaseUrl);
-            var host = uri.Host;
-            var port = uri.Port;
-            var dbName = uri.AbsolutePath.TrimStart('/');
-            var userInfo = uri.UserInfo.Split(':');
-            var username = userInfo[0];
-            var password = userInfo.Length > 1 ? userInfo[1] : "";
-
-            var connectionString = $"Host={host};Port={port};Database={dbName};Username={username};Password={password};";
-
-            optionsBuilder.UseNpgsql(connectionString);
         }
     }
 }

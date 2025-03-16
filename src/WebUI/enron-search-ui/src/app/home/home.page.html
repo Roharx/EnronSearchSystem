@@ -1,0 +1,20 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Enron Search</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-input [(ngModel)]="searchQuery" placeholder="Enter search term"></ion-input>
+  </ion-item>
+
+  <ion-button expand="full" (click)="searchFiles()">Search</ion-button>
+
+  <ion-list>
+    <ion-item *ngFor="let file of searchResults">
+      <ion-label>{{ file.FileName }}</ion-label>
+      <ion-button (click)="downloadFile(file.FileId)">Download</ion-button>
+    </ion-item>
+  </ion-list>
+</ion-content>
