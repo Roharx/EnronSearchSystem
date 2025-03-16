@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { IonicModule } from '@ionic/angular';
+import { IonicModule, AlertController } from '@ionic/angular';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 
@@ -15,13 +15,28 @@ export class HomePage {
   searchQuery = '';
   searchResults: any[] = [];
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private alertCtrl: AlertController) {}
 
-  searchFiles() {
+  async searchFiles() {
     if (!this.searchQuery.trim()) return;
 
-    this.http.get<any[]>(`http://localhost:8080/search?q=${this.searchQuery}`).subscribe((data) => {
-      this.searchResults = data;
+    this.searchResults = [];
+
+    this.http.get<any[]>(`http://localhost:8080/search?q=${this.searchQuery}`).subscribe(async (data) => {
+      if (data.length === 0) {
+        this.searchResults = [];
+
+        // Show Ionic alert when no results are found
+        const alert = await this.alertCtrl.create({
+          header: 'No Results',
+          message: `The database does not have the word: ${this.searchQuery}`,
+          buttons: ['OK'],
+        });
+
+        await alert.present();
+      } else {
+        this.searchResults = data;
+      }
     });
   }
 

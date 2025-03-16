@@ -11,7 +11,7 @@
 
   <ion-button expand="full" (click)="searchFiles()">Search</ion-button>
 
-  <ion-list>
+  <ion-list *ngIf="searchResults.length > 0">
     <ion-item *ngFor="let file of searchResults">
       <ion-label>{{ file.FileName }}</ion-label>
       <ion-button (click)="downloadFile(file.FileId)">Download</ion-button>
