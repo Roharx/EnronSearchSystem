@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: src/SearchAPI/Dockerfile
+    container_name: search-api
     ports:
       - "8080:8080"
     depends_on:
@@ -20,29 +21,45 @@ services:
     build:
       context: .
       dockerfile: src/CleanerService/Dockerfile
+    container_name: cleaner-service
     depends_on:
-      - message-queue
+      message-queue:
+        condition: service_healthy
     networks:
       - enron-network
-
+    volumes:
+      - ./src/CleanerService/maildir:/app/maildir
+    environment:
+      RABBITMQ_HOST: "message-queue"
+      QUEUE_NAME: "cleaned-emails"
+  
   # Indexer Service (Background Worker)
   indexer-service:
     build:
       context: .
       dockerfile: src/IndexerService/Dockerfile
+    container_name: indexer-service
     depends_on:
-      - message-queue
-      - database
+      message-queue:
+        condition: service_healthy  # Ensure RabbitMQ is fully up before indexer starts
+      database:
+        condition: service_healthy
     networks:
       - enron-network
     environment:
+      RABBITMQ_HOST: "message-queue"
+      QUEUE_NAME: "cleaned-emails"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
-
+  
   # Database Migration Service (Runs Once)
   db-migration:
     build:
       context: .
       dockerfile: infrastructure/Database/Dockerfile
+    container_name: db-migration
     depends_on:
       database:
         condition: service_healthy
@@ -52,20 +69,56 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
     command: [ "sh", "-c", "sleep 20 && dotnet ef database update" ]
     restart: "no"
-  
+
+  # Message Queue Worker Service
+  message-queue-worker:
+    build:
+      context: .
+      dockerfile: infrastructure/MessageQueue/Dockerfile
+    container_name: message-queue-worker
+    depends_on:
+      message-queue:
+        condition: service_healthy
+    networks:
+      - enron-network
+    environment:
+      RABBITMQ_HOST: "message-queue"
+      QUEUE_NAME: "cleaned-emails"
   
   # Message Queue (RabbitMQ)
   message-queue:
     image: rabbitmq:3-management
+    container_name: message-queue
     ports:
       - "5672:5672"  # AMQP protocol
       - "15672:15672"  # Web UI for monitoring
     networks:
       - enron-network
-
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+  
+  # Web UI (Ionic 7)
+  web-ui:
+    build:
+      context: .
+      dockerfile: src/WebUI/enron-search-ui/Dockerfile
+    container_name: web-ui
+    ports:
+      - "8100:80"
+    depends_on:
+      search-api:
+        condition: service_started
+    networks:
+      - enron-network
+    restart: unless-stopped
+    
   # PostgreSQL Database
   database:
     image: postgres:15
+    container_name: database
     ports:
       - "5432:5432"
     environment:
@@ -88,3 +141,4 @@ networks:
 
 volumes:
   pgdata:
+  maildir:

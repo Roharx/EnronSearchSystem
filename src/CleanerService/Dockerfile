@@ -16,5 +16,12 @@ RUN dotnet publish -c Release -o /out
 # Use runtime image to run the application
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
+
+# Copy built application
 COPY --from=build /out .
-CMD ["dotnet", "CleanerService.dll"]
+
+# Ensure maildir exists in container
+RUN mkdir -p /app/maildir && chmod -R 777 /app/maildir
+
+# Start the service with an entrypoint to ensure maildir exists at runtime
+ENTRYPOINT ["/bin/sh", "-c", "mkdir -p /app/maildir && chmod -R 777 /app/maildir && exec dotnet CleanerService.dll"]

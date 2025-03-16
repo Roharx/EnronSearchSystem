@@ -76,6 +76,9 @@ namespace Database.Migrations
 
                     b.HasKey("WordId");
 
+                    b.HasIndex("Text")
+                        .IsUnique();
+
                     b.ToTable("Words");
                 });
 
